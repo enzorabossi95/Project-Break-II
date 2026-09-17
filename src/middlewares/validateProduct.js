@@ -1,4 +1,15 @@
 export const validateProduct = (req, res, next) => {
+  // con multipart/form-data (subida de imagen) los numéricos llegan como string
+  if (typeof req.body.price === "string" && req.body.price !== "") {
+    const parsed = Number(req.body.price);
+    if (!Number.isNaN(parsed)) req.body.price = parsed;
+  }
+
+  if (typeof req.body.stock === "string" && req.body.stock !== "") {
+    const parsed = Number(req.body.stock);
+    if (!Number.isNaN(parsed)) req.body.stock = parsed;
+  }
+
   const { name, price } = req.body;
 
   if (name !== undefined && typeof name !== "string") {

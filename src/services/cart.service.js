@@ -28,11 +28,18 @@ export const addItemToCart = async (userId, productId, quantity) => {
   const cart = await getActiveCart(userId);
 
   const existingItem = cart.items.find((item) => item.productId === productId);
+  const requestedQuantity = (existingItem?.quantity ?? 0) + quantity;
+
+  if (requestedQuantity > product.stock) {
+    const error = new Error(`Stock insuficiente: quedan ${product.stock} unidades de "${product.name}"`);
+    error.status = 400;
+    throw error;
+  }
 
   if (existingItem) {
     return prisma.cartItem.update({
       where: { id: existingItem.id },
-      data: { quantity: existingItem.quantity + quantity },
+      data: { quantity: requestedQuantity },
     });
   }
 
@@ -55,32 +62,62 @@ export const removeItemFromCart = async (userId, itemId) => {
 };
 
 export const checkout = async (userId) => {
-  const cart = await getActiveCart(userId);
+  return prisma.$transaction(async (tx) => {
+    const cart = await tx.cart.findFirst({
+      where: { userId, status: "ACTIVE" },
+      include: { items: true },
+    });
 
-  if (cart.items.length === 0) {
-    const error = new Error("El carrito está vacío");
-    error.status = 400;
-    throw error;
-  }
+    if (!cart || cart.items.length === 0) {
+      const error = new Error("El carrito está vacío");
+      error.status = 400;
+      throw error;
+    }
 
-  const productIds = cart.items.map((item) => item.productId);
-  const products = await prisma.product.findMany({ where: { id: { in: productIds } } });
+    // claim atómico: solo marca CHECKED_OUT si seguía ACTIVE, evita doble orden en carreras
+    const claimed = await tx.cart.updateMany({
+      where: { id: cart.id, status: "ACTIVE" },
+      data: { status: "CHECKED_OUT" },
+    });
 
-  let total = 0;
-  const orderItemsData = cart.items.map((item) => {
-    const product = products.find((p) => p.id === item.productId);
-    const priceAtPurchase = product.price;
-    total += priceAtPurchase * item.quantity;
+    if (claimed.count === 0) {
+      const error = new Error("Esta compra ya fue confirmada");
+      error.status = 409;
+      throw error;
+    }
 
-    return {
-      productId: item.productId,
-      quantity: item.quantity,
-      priceAtPurchase,
-    };
-  });
+    const productIds = cart.items.map((item) => item.productId);
+    const products = await tx.product.findMany({ where: { id: { in: productIds } } });
 
-  const order = await prisma.$transaction(async (tx) => {
-    const newOrder = await tx.order.create({
+    let total = 0;
+    const orderItemsData = [];
+
+    for (const item of cart.items) {
+      const product = products.find((p) => p.id === item.productId);
+
+      // mismo patrón de claim atómico que arriba, ahora sobre el stock
+      const stockUpdate = await tx.product.updateMany({
+        where: { id: item.productId, stock: { gte: item.quantity } },
+        data: { stock: { decrement: item.quantity } },
+      });
+
+      if (stockUpdate.count === 0) {
+        const error = new Error(`Stock insuficiente para "${product.name}"`);
+        error.status = 409;
+        throw error;
+      }
+
+      const priceAtPurchase = product.price;
+      total += priceAtPurchase * item.quantity;
+
+      orderItemsData.push({
+        productId: item.productId,
+        quantity: item.quantity,
+        priceAtPurchase,
+      });
+    }
+
+    return tx.order.create({
       data: {
         userId,
         total,
@@ -88,14 +125,5 @@ export const checkout = async (userId) => {
       },
       include: { items: true },
     });
-
-    await tx.cart.update({
-      where: { id: cart.id },
-      data: { status: "CHECKED_OUT" },
-    });
-
-    return newOrder;
   });
-
-  return order;
 };

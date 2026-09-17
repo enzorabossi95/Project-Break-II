@@ -11,6 +11,8 @@ datasource db {
 model Product {
   id          String   @id @default(cuid())
   name        String
+  brand       String?
+  category    String?
   description String?
   price       Float
   stock       Int      @default(0)

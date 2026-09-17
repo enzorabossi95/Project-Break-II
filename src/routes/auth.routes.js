@@ -1,5 +1,5 @@
 import express from "express";
-import { register, login } from "../controllers/auth.controller.js";
+import { register, login, logout } from "../controllers/auth.controller.js";
 
 const router = express.Router();
 
@@ -50,5 +50,16 @@ router.post("/register", register);
  *         description: Credenciales inválidas
  */
 router.post("/login", login);
+
+/**
+ * @swagger
+ * /api/auth/logout:
+ *   post:
+ *     summary: Cerrar sesión (limpia la cookie de sesión)
+ *     responses:
+ *       200:
+ *         description: Sesión cerrada
+ */
+router.post("/logout", logout);
 
 export default router;

@@ -12,6 +12,7 @@ export const createProduct = async (data) => {
   return prisma.product.create({
     data: {
       name: data.name,
+      category: data.category || null,
       description: data.description || null,
       price: data.price,
       stock: data.stock ?? 0,

@@ -3,6 +3,7 @@ import * as productController from "../controllers/products.controller.js";
 import { validateProduct } from "../middlewares/validateProduct.js";
 import { authenticate } from "../middlewares/authenticate.js";
 import { requireRole } from "../middlewares/requireRole.js";
+import { upload } from "../config/multer.js";
 import reviewsRoutes from "./reviews.routes.js";
 
 const router = express.Router();
@@ -71,7 +72,7 @@ router.get("/:id", productController.getProduct);
  *       403:
  *         description: No tenés permisos
  */
-router.post("/", authenticate, requireRole("ADMIN"), validateProduct, productController.addProduct);
+router.post("/", authenticate, requireRole("ADMIN"), upload.single("image"), validateProduct, productController.addProduct);
 
 /**
  * @swagger
@@ -103,7 +104,7 @@ router.post("/", authenticate, requireRole("ADMIN"), validateProduct, productCon
  *       404:
  *         description: Producto no encontrado
  */
-router.put("/:id", authenticate, requireRole("ADMIN"), validateProduct, productController.editProduct);
+router.put("/:id", authenticate, requireRole("ADMIN"), upload.single("image"), validateProduct, productController.editProduct);
 
 /**
  * @swagger
